@@ -18,7 +18,7 @@ def create_model(img_dim=(128, 128, 3)):
     model = Model(input_tensor, output)
     return model
 
-def predict(model, preprocessor, batch_size=128):
+def predict(model, preprocessor, batch_size=32):
     """
     Launch the predictions on the test dataset as well as the additional test dataset
     :return:

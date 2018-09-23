@@ -6,50 +6,83 @@ from keras.layers import Dense, Input, Flatten, Dropout, Permute
 from keras.layers.normalization import BatchNormalization
 from sklearn.metrics import fbeta_score
 
-def create_model(img_dim=(128, 128, 3)):
-    input_tensor = Input(shape=img_dim)
-    base_model = VGG16(include_top=False,
-                       weights='imagenet',
-                       input_shape=img_dim)
+class MyNet:
+    def __init__(self, img_dim=(128, 128, 3)):
+        input_tensor = Input(shape=img_dim)
+        base_model = VGG16(include_top=False,
+                           weights='imagenet',
+                           input_shape=img_dim)
     
-    bn = BatchNormalization()(input_tensor)
-    x = base_model(bn)
-    x = Flatten()(x)
-    output = Dense(17, activation='sigmoid')(x)
-    model = Model(input_tensor, output)
-    return model
+        bn = BatchNormalization()(input_tensor)
+        x = base_model(bn)
+        x = Flatten()(x)
+        output = Dense(17, activation='sigmoid')(x)
+        self.model = Model(input_tensor, output)
 
-def predict(model, preprocessor, batch_size=128):
-    """
-    Launch the predictions on the test dataset as well as the additional test dataset
-    :return:
-        predictions_labels: list
-            An array containing 17 length long arrays
-        filenames: list
-            File names associated to each prediction
-    """
-    generator = preprocessor.get_prediction_generator(batch_size)
-    predictions_labels = model.predict_generator(generator=generator, verbose=1,
-                                                 steps=len(preprocessor.X_test) / batch_size)
-    assert len(predictions_labels) == len(preprocessor.X_test), \
-        "len(predictions_labels) = {}, len(preprocessor.X_test) = {}".format(
-            len(predictions_labels), len(preprocessor.X_test))
-    return predictions_labels, np.array(preprocessor.X_test)
-
-def map_predictions(preprocessor, predictions, thresholds):
+    def predict(self, preprocessor, mode=0, batch_size=32):
         """
-        Return the predictions mapped to their labels
-        :param predictions: the predictions from the predict() method
-        :param thresholds: The threshold of each class to be considered as existing or not existing
-        :return: the predictions list mapped to their labels
+        Launch the predictions on the test dataset as well as the additional test dataset
+        mode: 
+            0 - test(default)
+            1 - train
+            2 - validation
+        :return:
+            predictions: list
+                An array containing 17 length long arrays of raw prediction value.
+            filenames: list
+                File names associated to each prediction
         """
-        predictions_labels = []
-        for prediction in predictions:
-            labels = [preprocessor.y_map[i] for i, value in enumerate(prediction) if value > thresholds[i]]
-            predictions_labels.append(labels)
+        if mode == 0:
+            generator = preprocessor._get_prediction_generator(batch_size)
+            X = preprocessor.X_test
+        elif mode == 1:
+            generator = preprocessor.get_train_generator(batch_size)
+            X = preprocessor.X_train
+        elif mode == 2:
+            generator = preprocessor.get_val_generator(batch_size)
+            X = preprocessor.X_val
+        else:
+            AssertionError ("Prediction mode not supported!")
+            return
 
-        return predictions_labels
+        predictions = self.model.predict_generator(generator=generator, verbose=1,
+                                                     steps=len(X) / batch_size)
+        assert len(predictions) == len(X), \
+            "len(predictions) = {}, len(X) = {}".format(
+                len(predictions), len(X))
+        return predictions, np.array(X)
 
-def fbeta(model, X_valid, y_valid):
-    p_valid = model.predict(X_valid)
-    return fbeta_score(y_valid, np.array(p_valid) > 0.2, beta=2, average='samples')
+    def map_predictions(self, preprocessor, predictions, thresholds):
+            """
+            Return the predictions mapped to their labels
+            :param predictions: the predictions from the predict() method
+            :param thresholds: The threshold of each class to be considered as existing or not existing
+            :return: the predictions list mapped to their labels
+            """
+            predictions_labels = []
+            for prediction in predictions:
+                labels = [preprocessor.y_map[i] for i, value in enumerate(prediction) if value > thresholds[i]]
+                predictions_labels.append(labels)
+
+            return predictions_labels
+
+    def fbeta(self, preprocessor, mode=0):
+        """
+        mode: 
+            0 - test(default)
+            1 - train
+            2 - validation
+        """
+        pred, _ = self.predict(preprocessor, mode)
+
+        if mode == 0:
+            y = preprocessor.y_test
+        elif mode == 1:
+            y = preprocessor.y_train
+        elif mode == 2:
+            y = preprocessor.y_val
+        else:
+            AssertionError ("Prediction mode not supported!")
+            return
+
+        return fbeta_score(np.array(y), pred > 0.2, beta=2, average='samples')

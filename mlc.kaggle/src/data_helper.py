@@ -186,50 +186,6 @@ class Preprocessor:
 
                 yield next(datagen.flow(batch_features, batch_labels, range_offset))
 
-    def get_prediction_generator(self, batch_size):
-        """
-        Returns a batch generator which transforms chunk of raw images into numpy matrices
-        and then "yield" them for the classifier. Doing so allow to greatly optimize
-        memory usage as the images are processed then deleted by chunks (defined by batch_size)
-        instead of preprocessing them all at once and feeding them to the classifier.
-        :param batch_size: int
-            The batch size
-        :return: generator
-            The batch generator
-        """
-
-        # NO SHUFFLE HERE as we need our predictions to be in the same order as the inputs
-        loop_range = len(self.X_test)
-        while True:
-            for i in range(loop_range):
-                start_offset = batch_size * i
-
-                # The last remaining files could be smaller than the batch_size
-                range_offset = min(batch_size, loop_range - start_offset)
-
-                # If we reached the end of the list then we break the loop
-                if range_offset <= 0:
-                    break
-
-                img_arrays = np.zeros((range_offset, *self.img_resize, 3))
-
-                for j in range(range_offset):
-                    img = Image.open(self.X_test[start_offset + j])
-                    img.thumbnail(self.img_resize_be4thumnail)
-
-                    # Convert to RGB and normalize
-                    img_array = np.asarray(img.convert("RGB"), dtype=np.float32)
-
-                    img_array = img_array[:, :, ::-1]
-                    # Zero-center by mean pixel
-                    img_array[:, :, 0] -= 103.939
-                    img_array[:, :, 1] -= 116.779
-                    img_array[:, :, 2] -= 123.68
-                    img_array = img_array / 255
-
-                    img_arrays[j] = img_array
-                yield img_arrays
-
     def _get_class_mapping(self, *args):
         """
 

@@ -22,8 +22,8 @@ import vgg16
 import resnet50
 import data_helper
 from data_helper import Preprocessor
+from vgg16 import MyNet
 
-mynet = vgg16
 
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
@@ -82,8 +82,8 @@ validation_split_size = 0.2
 # ## Data preprocessing
 #----------------------------
 
-preprocessor = Preprocessor(train_jpeg_dir, train_csv_file, test_jpeg_dir, test_csv_file, 
-                                  img_resize[:2], validation_split_size)
+preprocessor = Preprocessor(train_jpeg_dir, train_csv_file, test_jpeg_dir, test_csv_file,
+                            img_resize[:2], validation_split_size)
 preprocessor.init()
 
 print("X_train/y_train length: {}/{}".format(len(preprocessor.X_train), len(preprocessor.y_train)))
@@ -92,24 +92,20 @@ print("X_test/y_test length: {}/{}".format(len(preprocessor.X_test), len(preproc
 preprocessor.y_map
 
 
-history = History()
-callbacks = [history,
-             EarlyStopping(monitor='val_loss', patience=3, verbose=1, min_delta=1e-4),
-             ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=1, cooldown=0, min_lr=1e-7, verbose=1),
-             ModelCheckpoint(filepath='weights/weights.best.hdf5', verbose=1, save_best_only=True,
-                             save_weights_only=True, mode='auto')]
+
+
+
+# Constructing the model
+#----------------------------
+
+
+mynet = MyNet(img_dim=img_resize)
+mynet.model.summary()
+mynet.model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics = ['accuracy'])
+
 
 X_train, y_train = preprocessor.X_train, preprocessor.y_train
 X_val, y_val = preprocessor.X_val, preprocessor.y_val
-
-
-
-
-# ## Constructing the model
-#----------------------------
-
-model = mynet.create_model(img_dim=img_resize)
-model.summary()
 
 batch_size = 32
 train_steps = len(X_train) / batch_size
@@ -118,10 +114,18 @@ val_steps = len(X_val) / batch_size
 train_generator = preprocessor.get_train_generator(batch_size)
 val_generator = preprocessor.get_val_generator(batch_size)
 
-model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics = ['accuracy'])
-# model.compile(optimizer=Adam(lr=1e-4), loss='mean_absolute_error', metrics = ['accuracy'])
+# Train the model
+#----------------------------
 
-history = model.fit_generator(train_generator, train_steps, epochs=25, verbose=1,
+history = History()
+callbacks = [history,
+             EarlyStopping(monitor='val_loss', patience=3, verbose=1, min_delta=1e-4),
+             ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=1, cooldown=0, min_lr=1e-7, verbose=1),
+             ModelCheckpoint(filepath='weights/weights.best.hdf5', verbose=1, save_best_only=True,
+                             save_weights_only=True, mode='auto')]
+
+# No serious training running on Jupyter notebooks, Run EPOCH
+history = mynet.model.fit_generator(train_generator, train_steps, epochs=1, verbose=1,
                     validation_data=val_generator, validation_steps=val_steps, callbacks=callbacks)
 
 
@@ -135,3 +139,121 @@ plt.xlabel('epoch')
 plt.legend(['train', 'validation'], loc='upper left')
 #plt.show()
 plt.savefig("vgg16.losses.png")
+
+
+# In[13]:
+
+
+# Loading trained weights
+mynet.model.load_weights("weights/weights.best.hdf5")
+print("Weights loaded")
+
+
+#    ## Train the model
+
+# ## Evaluate
+
+# In[14]:
+
+
+predictions, x_test = mynet.predict(preprocessor, batch_size=32)
+print("Predictions shape: {}\nFiles name shape: {}\n1st predictions ({}) entry:\n{}".format(predictions.shape, 
+                                    x_test.shape, x_test[0], predictions[0]))
+
+# Setting threshold for each class
+thresholds = [0.2] * len(labels_set)
+
+predicted_labels = mynet.map_predictions(preprocessor, predictions, thresholds)
+
+
+# ### Peep into predictions
+
+# In[15]:
+
+
+import re
+
+# Look at predicted_labels vs. GT
+###################################
+# NO REAL GROUND TRUTH exists!!!
+# Kaggle doesn't provide GT for test data.
+# Used some fake ones instead. 
+###################################
+labels_dict_test = dict()
+for fn,tags in labels_df_test.values:
+    labels_dict_test[fn] = tags
+    
+plt.rc('axes', grid=False)
+_, axs = plt.subplots(5, 2, sharex='col', sharey='row', figsize=(15, 20))
+axs = axs.ravel()
+
+for j in range(10):
+    i = random.randint(0, len(predicted_labels))
+    img = mpimg.imread(x_test[i])
+    
+    x_test_stripped = ''
+    matchObj = re.match( r'.*(test_\d*).jpg.*', x_test[i])
+    x_test_stripped = matchObj.group(1)
+
+    labels=labels_dict_test[x_test_stripped]
+    print(j, x_test[i], predicted_labels[i], labels)
+    axs[j].imshow(img)
+    axs[j].set_title('Pred:{}'.format(predicted_labels[i]))
+    axs[j].set_xlabel('GT:{}'.format(labels))
+plt.show()
+
+
+# In[16]:
+
+
+import psutil
+
+batch_size=32
+print("model metrics_name:", mynet.model.metrics_names)
+my_loss, my_metric = mynet.model.evaluate_generator(preprocessor._get_prediction_generator(batch_size),
+                         len(preprocessor.X_test) / batch_size, workers = (psutil.cpu_count()-1))
+print("my_loss=", my_loss, "my_metric=", my_metric)
+
+
+# In[20]:
+
+
+fbeta_score = mynet.fbeta(preprocessor, mode=1)
+print("fbeta_score (training data) = ", fbeta_score)
+
+
+# In[17]:
+
+
+# TODO: No thresholding applied yet! Use 0.2 as default.
+fbeta_score = mynet.fbeta(preprocessor, mode=2)
+print("fbeta_score (validation data) = ", fbeta_score)
+
+
+# In[18]:
+
+
+##----------------------------------------
+## TEST data score is expected to be low, as there NO REAL GROUND TRUTH!!!
+##----------------------------------------
+fbeta_score = mynet.fbeta(preprocessor)
+print("fbeta_score (test data) = ", fbeta_score)
+
+
+# In[19]:
+
+
+tags_list = [None] * len(predicted_labels)
+for i, tags in enumerate(predicted_labels):
+    tags_list[i] = ' '.join(map(str, tags))
+
+final_data = [[filename.split(".")[0], tags] for filename, tags in zip(x_test, tags_list)]
+
+
+final_df = pd.DataFrame(final_data, columns=['image_name', 'tags'])
+print("Predictions rows:", final_df.size)
+final_df.head()
+
+
+final_df.to_csv('../submission_file.csv', index=False)
+
