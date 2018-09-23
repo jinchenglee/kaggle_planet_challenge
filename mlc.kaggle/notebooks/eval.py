@@ -92,20 +92,13 @@ print("X_test/y_test length: {}/{}".format(len(preprocessor.X_test), len(preproc
 preprocessor.y_map
 
 
-history = History()
-callbacks = [history,
-             EarlyStopping(monitor='val_loss', patience=3, verbose=1, min_delta=1e-4),
-             ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=1, cooldown=0, min_lr=1e-7, verbose=1),
-             ModelCheckpoint(filepath='weights/weights.best.hdf5', verbose=1, save_best_only=True,
-                             save_weights_only=True, mode='auto')]
-
 X_train, y_train = preprocessor.X_train, preprocessor.y_train
 X_val, y_val = preprocessor.X_val, preprocessor.y_val
 
 
 
 
-# ## Constructing the model
+# Constructing the model
 #----------------------------
 
 model = mynet.create_model(img_dim=img_resize)
@@ -119,19 +112,76 @@ train_generator = preprocessor.get_train_generator(batch_size)
 val_generator = preprocessor.get_val_generator(batch_size)
 
 model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics = ['accuracy'])
-# model.compile(optimizer=Adam(lr=1e-4), loss='mean_absolute_error', metrics = ['accuracy'])
-
-history = model.fit_generator(train_generator, train_steps, epochs=25, verbose=1,
-                    validation_data=val_generator, validation_steps=val_steps, callbacks=callbacks)
+#model.compile(optimizer=Adam(lr=1e-4), loss='mean_absolute_error', metrics = ['accuracy'])
 
 
-# ## Visualize Loss Curve
 
-plt.plot(history.history['loss'])
-plt.plot(history.history['val_loss'])
-plt.title('model loss')
-plt.ylabel('loss')
-plt.xlabel('epoch')
-plt.legend(['train', 'validation'], loc='upper left')
+# Evaluate
+#----------------------------
+
+# Loading trained weights
+model.load_weights("weights/weights.best.hdf5")
+print("Weights loaded")
+
+
+predictions, x_test_filename = mynet.predict(model, preprocessor, batch_size=128)
+print("Predictions shape: {}\nFiles name shape: {}\n1st predictions ({}) entry:\n{}".format(predictions.shape, 
+                                    x_test_filename.shape, x_test_filename[0], predictions[0]))
+
+# Setting threshold for each class
+thresholds = [0.2] * len(labels_set)
+
+predicted_labels = mynet.map_predictions(preprocessor, predictions, thresholds)
+
+
+# ### Peep into predictions
+
+# Look at predicted_labels vs. GT
+labels_dict_test = dict()
+for fn,tags in labels_df_test.values:
+    labels_dict_test[fn] = tags
+    
+plt.rc('axes', grid=False)
+_, axs = plt.subplots(5, 2, sharex='col', sharey='row', figsize=(15, 20))
+axs = axs.ravel()
+
+for j in range(10):
+    i = random.randint(0, len(predicted_labels))
+    img = mpimg.imread(test_jpeg_dir + '/' + x_test_filename[i] + '.jpg')
+    
+    labels=labels_dict_test[x_test_filename[i]]
+    print(j, x_test_filename[i], predicted_labels[i], labels)
+    axs[j].imshow(img)
+    axs[j].set_title('Pred:{}'.format(predicted_labels[i]))
+    axs[j].set_xlabel('GT:{}'.format(labels))
 #plt.show()
-plt.savefig("vgg16.losses.png")
+plt.savefig("vgg16.peep_test_data.png")
+
+
+batch_size=32
+model.metrics_names
+my_loss, my_metric = model.evaluate_generator(preprocessor._get_prediction_generator(batch_size), 
+                         len(preprocessor.X_test) / batch_size)
+print(my_loss, my_metric)
+
+
+#fbeta_score = mynet.fbeta(model, X_val, y_val)
+#print("fbeta_score (validation data) = ", fbeta_score)
+
+#fbeta_score = fbeta_score()
+#print("fbeta_score (test data) = ", fbeta_score)
+#
+#tags_list = [None] * len(predicted_labels)
+#for i, tags in enumerate(predicted_labels):
+#    tags_list[i] = ' '.join(map(str, tags))
+#
+#final_data = [[filename.split(".")[0], tags] for filename, tags in zip(x_test_filename, tags_list)]
+#
+#
+#final_df = pd.DataFrame(final_data, columns=['image_name', 'tags'])
+#print("Predictions rows:", final_df.size)
+#final_df.head()
+#
+#
+#final_df.to_csv('../submission_file.csv', index=False)
+#
