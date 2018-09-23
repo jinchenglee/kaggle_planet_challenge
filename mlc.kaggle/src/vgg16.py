@@ -30,7 +30,7 @@ def predict(model, preprocessor, batch_size=128):
     """
     generator = preprocessor.get_prediction_generator(batch_size)
     predictions_labels = model.predict_generator(generator=generator, verbose=1,
-                                                 steps=len(preprocessor.X_test_filename) / batch_size)
+                                                 steps=len(preprocessor.X_test) / batch_size)
     assert len(predictions_labels) == len(preprocessor.X_test), \
         "len(predictions_labels) = {}, len(preprocessor.X_test) = {}".format(
             len(predictions_labels), len(preprocessor.X_test))
