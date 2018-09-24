@@ -36,8 +36,8 @@ class Preprocessor:
         self.validation_split = validation_split
         self.img_resize = img_resize
         self.img_resize_be4thumnail = (np.max(img_resize), np.max(img_resize))
-        assert self.img_resize == (256, 256), "Input img_size to Preprocessor should be (256, 256)"
-        assert self.img_resize_be4thumnail == (256, 256), "Error in img resolution to thumbnail()."
+        #assert self.img_resize == (256, 256), "Input img_size to Preprocessor should be (256, 256)"
+        #assert self.img_resize_be4thumnail == (256, 256), "Error in img resolution to thumbnail()."
         self.test_csv_file = test_csv_file
         self.test_jpeg_dir = test_jpeg_dir
         self.train_csv_file = train_csv_file
