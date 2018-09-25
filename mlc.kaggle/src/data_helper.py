@@ -62,7 +62,7 @@ class Preprocessor:
             self.img_resize = Image.open(self.X_test[0]).size
             print("Default image size is", self.img_resize)
 
-    def get_train_generator(self, batch_size):
+    def get_train_generator(self, batch_size, shuffle=True):
         """
         Returns a batch generator which transforms chunk of raw images into numpy matrices
         and then "yield" them for the classifier. Doing so allow to greatly optimize
@@ -110,9 +110,9 @@ class Preprocessor:
                 # Augment the images (using Keras allow us to add randomization/shuffle to augmented images)
                 # Here the next batch of the data generator (and only one for this iteration)
                 # is taken and returned in the yield statement
-                yield next(datagen.flow(batch_features, batch_labels, range_offset))
+                yield next(datagen.flow(batch_features, batch_labels, range_offset, shuffle=shuffle))
 
-    def get_val_generator(self, batch_size):
+    def get_val_generator(self, batch_size, shuffle=True):
         # Image Augmentation
         datagen = ImageDataGenerator(
             rescale=1./255,
@@ -147,9 +147,9 @@ class Preprocessor:
                     batch_features[j] = img_array
                     batch_labels[j] = self.y_val[start_offset + j]
 
-                yield next(datagen.flow(batch_features, batch_labels, range_offset))
+                yield next(datagen.flow(batch_features, batch_labels, range_offset, shuffle=shuffle))
 
-    def _get_prediction_generator(self, batch_size):
+    def get_prediction_generator(self, batch_size, shuffle=True):
         # Image Augmentation
         datagen = ImageDataGenerator(
             rescale=1./255,
@@ -184,7 +184,7 @@ class Preprocessor:
                     batch_features[j] = img_array
                     batch_labels[j] = self.y_test[start_offset + j] 
 
-                yield next(datagen.flow(batch_features, batch_labels, range_offset))
+                yield next(datagen.flow(batch_features, batch_labels, range_offset, shuffle=shuffle))
 
     def _get_class_mapping(self, *args):
         """

@@ -1,5 +1,6 @@
 import numpy as np
 from keras.applications.vgg16 import VGG16
+from keras.applications.resnet50 import ResNet50 
 from keras.backend import permute_dimensions
 from keras.models import Model
 from keras.layers import Dense, Input, Flatten, Dropout, Permute
@@ -7,11 +8,16 @@ from keras.layers.normalization import BatchNormalization
 from sklearn.metrics import fbeta_score
 
 class MyNet:
-    def __init__(self, img_dim=(128, 128, 3)):
+    def __init__(self, net_selection="vgg16", img_dim=(128, 128, 3)):
         input_tensor = Input(shape=img_dim)
-        base_model = VGG16(include_top=False,
-                           weights='imagenet',
-                           input_shape=img_dim)
+        if net_selection=="resnet50":
+            base_model = ResNet50(include_top=False,
+                               weights='imagenet',
+                               input_shape=img_dim)
+        else:
+            base_model = VGG16(include_top=False,
+                               weights='imagenet',
+                               input_shape=img_dim)
     
         bn = BatchNormalization()(input_tensor)
         x = base_model(bn)
@@ -32,14 +38,17 @@ class MyNet:
             filenames: list
                 File names associated to each prediction
         """
+        # IMPORTANT:: shuffle=False in evaluation. We do not need shuffle in prediction!!!
+        # Caused problems when comparing to y_test due to shuffling.
+        # See this post: https://github.com/keras-team/keras/issues/3477
         if mode == 0:
-            generator = preprocessor._get_prediction_generator(batch_size)
+            generator = preprocessor.get_prediction_generator(batch_size, shuffle=False)
             X = preprocessor.X_test
         elif mode == 1:
-            generator = preprocessor.get_train_generator(batch_size)
+            generator = preprocessor.get_train_generator(batch_size, shuffle=False)
             X = preprocessor.X_train
         elif mode == 2:
-            generator = preprocessor.get_val_generator(batch_size)
+            generator = preprocessor.get_val_generator(batch_size, shuffle=False)
             X = preprocessor.X_val
         else:
             AssertionError ("Prediction mode not supported!")

@@ -18,12 +18,12 @@ from keras.optimizers import Adam
 from keras.callbacks import ModelCheckpoint, EarlyStopping, ReduceLROnPlateau, History
 from itertools import chain
 import random
-import vgg16
-import resnet50
+import mynet
 import data_helper
 from data_helper import Preprocessor
-from vgg16 import MyNet
+from mynet import MyNet
 
+MYNET = "vgg16"
 
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
@@ -98,8 +98,7 @@ preprocessor.y_map
 # Constructing the model
 #----------------------------
 
-
-mynet = MyNet(img_dim=img_resize)
+mynet = MyNet(net_selection=MYNET, img_dim=img_resize)
 mynet.model.summary()
 mynet.model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics = ['accuracy'])
 
@@ -117,60 +116,50 @@ val_generator = preprocessor.get_val_generator(batch_size)
 # Train the model
 #----------------------------
 
-history = History()
-callbacks = [history,
+train_history = History()
+callbacks = [train_history,
              EarlyStopping(monitor='val_loss', patience=3, verbose=1, min_delta=1e-4),
              ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=1, cooldown=0, min_lr=1e-7, verbose=1),
              ModelCheckpoint(filepath='weights/weights.best.hdf5', verbose=1, save_best_only=True,
                              save_weights_only=True, mode='auto')]
 
 # No serious training running on Jupyter notebooks, Run EPOCH
-history = mynet.model.fit_generator(train_generator, train_steps, epochs=1, verbose=1,
+train_history = mynet.model.fit_generator(train_generator, train_steps, epochs=25, verbose=1,
                     validation_data=val_generator, validation_steps=val_steps, callbacks=callbacks)
 
 
 # ## Visualize Loss Curve
 
-plt.plot(history.history['loss'])
-plt.plot(history.history['val_loss'])
+plt.plot(train_history.history['loss'])
+plt.plot(train_history.history['val_loss'])
 plt.title('model loss')
 plt.ylabel('loss')
 plt.xlabel('epoch')
 plt.legend(['train', 'validation'], loc='upper left')
 #plt.show()
-plt.savefig("vgg16.losses.png")
+plt.savefig(MYNET+".losses.png")
 
 
-# In[13]:
-
+# Evaluate
+#----------------------------
 
 # Loading trained weights
 mynet.model.load_weights("weights/weights.best.hdf5")
 print("Weights loaded")
 
 
-#    ## Train the model
-
-# ## Evaluate
-
-# In[14]:
-
-
+# Make predictions to get raw prediction values of each class/sample
 predictions, x_test = mynet.predict(preprocessor, batch_size=32)
 print("Predictions shape: {}\nFiles name shape: {}\n1st predictions ({}) entry:\n{}".format(predictions.shape, 
                                     x_test.shape, x_test[0], predictions[0]))
 
 # Setting threshold for each class
 thresholds = [0.2] * len(labels_set)
-
+# Map raw predictions to label names
 predicted_labels = mynet.map_predictions(preprocessor, predictions, thresholds)
 
 
 # ### Peep into predictions
-
-# In[15]:
-
-
 import re
 
 # Look at predicted_labels vs. GT
@@ -200,38 +189,27 @@ for j in range(10):
     axs[j].imshow(img)
     axs[j].set_title('Pred:{}'.format(predicted_labels[i]))
     axs[j].set_xlabel('GT:{}'.format(labels))
-plt.show()
+#plt.show()
+plt.savefig(MYNET+".peep_test_data.png")
 
 
-# In[16]:
-
-
+# Evaluate loss and metrics
 import psutil
 
 batch_size=32
 print("model metrics_name:", mynet.model.metrics_names)
-my_loss, my_metric = mynet.model.evaluate_generator(preprocessor._get_prediction_generator(batch_size),
+my_loss, my_metric = mynet.model.evaluate_generator(preprocessor.get_prediction_generator(batch_size),
                          len(preprocessor.X_test) / batch_size, workers = (psutil.cpu_count()-1))
 print("my_loss=", my_loss, "my_metric=", my_metric)
-
-
-# In[20]:
 
 
 fbeta_score = mynet.fbeta(preprocessor, mode=1)
 print("fbeta_score (training data) = ", fbeta_score)
 
 
-# In[17]:
-
-
 # TODO: No thresholding applied yet! Use 0.2 as default.
 fbeta_score = mynet.fbeta(preprocessor, mode=2)
 print("fbeta_score (validation data) = ", fbeta_score)
-
-
-# In[18]:
-
 
 ##----------------------------------------
 ## TEST data score is expected to be low, as there NO REAL GROUND TRUTH!!!
@@ -240,20 +218,44 @@ fbeta_score = mynet.fbeta(preprocessor)
 print("fbeta_score (test data) = ", fbeta_score)
 
 
-# In[19]:
-
-
 tags_list = [None] * len(predicted_labels)
 for i, tags in enumerate(predicted_labels):
     tags_list[i] = ' '.join(map(str, tags))
 
 final_data = [[filename.split(".")[0], tags] for filename, tags in zip(x_test, tags_list)]
 
-
 final_df = pd.DataFrame(final_data, columns=['image_name', 'tags'])
 print("Predictions rows:", final_df.size)
 final_df.head()
 
-
 final_df.to_csv('../submission_file.csv', index=False)
+
+
+#Manually calculate fbeta scores, to confirm above calcuations are correct.
+from sklearn.metrics import fbeta_score
+
+preprocessor.y_map
+
+test_img_y_prediction = np.zeros_like(preprocessor.y_test)
+
+for i in range(len(preprocessor.X_test)):
+    # Load image
+    test_img_name = preprocessor.X_test[i]
+    test_img_y = preprocessor.y_test[i]
+    test_img_x, test_img_y = preprocessor._val_transform_to_matrices((test_img_name, test_img_y))
+    # Add dimension 'batch'
+    test_img_x = test_img_x.reshape(-1, 128, 128, 3)
+    
+    # Make prediction
+    test_img_y_prediction[i] = mynet.model.predict(test_img_x)[0]
+    
+    # Calculate fbeta score
+    #score = fbeta_score(test_img_y, test_img_y_prediction[0] > 0.2, beta=2)
+
+    #if score < 0.8:
+    #    print("filename=", test_img_name, "score=", score)
+
+print("fbeta_avg_samples=", fbeta_score(np.array(preprocessor.y_test), test_img_y_prediction > 0.2, beta=1, average='samples'))
+print("fbeta_avg_micro=", fbeta_score(np.array(preprocessor.y_test), test_img_y_prediction > 0.2, beta=1, average='micro'))
+print("fbeta_avg_macro=", fbeta_score(np.array(preprocessor.y_test), test_img_y_prediction > 0.2, beta=1, average='macro'))
 
