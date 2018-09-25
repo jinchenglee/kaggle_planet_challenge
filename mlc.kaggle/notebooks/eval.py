@@ -219,7 +219,7 @@ for i in range(len(preprocessor.X_test)):
     test_img_y = preprocessor.y_test[i]
     test_img_x, test_img_y = preprocessor._val_transform_to_matrices((test_img_name, test_img_y))
     # Add dimension 'batch'
-    test_img_x = test_img_x.reshape(-1, 128, 128, 3)
+    test_img_x = test_img_x.reshape(-1, 256, 256, 3)
     
     # Make prediction
     test_img_y_prediction[i] = mynet.model.predict(test_img_x)[0]

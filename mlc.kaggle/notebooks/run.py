@@ -106,7 +106,7 @@ mynet.model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics
 X_train, y_train = preprocessor.X_train, preprocessor.y_train
 X_val, y_val = preprocessor.X_val, preprocessor.y_val
 
-batch_size = 32
+batch_size = 16
 train_steps = len(X_train) / batch_size
 val_steps = len(X_val) / batch_size
 
@@ -244,7 +244,7 @@ for i in range(len(preprocessor.X_test)):
     test_img_y = preprocessor.y_test[i]
     test_img_x, test_img_y = preprocessor._val_transform_to_matrices((test_img_name, test_img_y))
     # Add dimension 'batch'
-    test_img_x = test_img_x.reshape(-1, 128, 128, 3)
+    test_img_x = test_img_x.reshape(-1, 256, 256, 3)
     
     # Make prediction
     test_img_y_prediction[i] = mynet.model.predict(test_img_x)[0]
