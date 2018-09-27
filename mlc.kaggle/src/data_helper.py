@@ -10,6 +10,7 @@ from multiprocessing import cpu_count
 from concurrent.futures import ThreadPoolExecutor
 from sklearn.model_selection import StratifiedShuffleSplit
 from keras.preprocessing.image import ImageDataGenerator
+from keras import backend as K
 
 
 class Preprocessor:
@@ -91,7 +92,10 @@ class Preprocessor:
                 if range_offset <= 0:
                     break
 
-                batch_features = np.zeros((range_offset, *self.img_resize, 3))
+                if K.image_data_format() == 'channels_first':
+                    batch_features = np.zeros((range_offset, 3, *self.img_resize))
+                else:
+                    batch_features = np.zeros((range_offset, *self.img_resize, 3))
                 batch_labels = np.zeros((range_offset, len(self.y_train[0])))
 
                 for j in range(range_offset):
@@ -131,7 +135,10 @@ class Preprocessor:
                 if range_offset <= 0:
                     break
 
-                batch_features = np.zeros((range_offset, *self.img_resize, 3))
+                if K.image_data_format() == 'channels_first':
+                    batch_features = np.zeros((range_offset, 3, *self.img_resize))
+                else:
+                    batch_features = np.zeros((range_offset, *self.img_resize, 3))
                 batch_labels = np.zeros((range_offset, len(self.y_val[0])))
 
                 for j in range(range_offset):
@@ -149,7 +156,7 @@ class Preprocessor:
 
                 yield next(datagen.flow(batch_features, batch_labels, range_offset, shuffle=shuffle))
 
-    def get_prediction_generator(self, batch_size, shuffle=True):
+    def get_prediction_generator(self, batch_size, shuffle=False):
         # Image Augmentation
         datagen = ImageDataGenerator(
             rescale=1./255,
@@ -168,7 +175,10 @@ class Preprocessor:
                 if range_offset <= 0:
                     break
 
-                batch_features = np.zeros((range_offset, *self.img_resize, 3))
+                if K.image_data_format() == 'channels_first':
+                    batch_features = np.zeros((range_offset, 3, *self.img_resize))
+                else:
+                    batch_features = np.zeros((range_offset, *self.img_resize, 3))
                 batch_labels = np.zeros((range_offset, len(self.y_test[0]))) 
 
                 for j in range(range_offset):
@@ -359,10 +369,13 @@ class Preprocessor:
         img_array[:, :, 1] -= 116.779
         img_array[:, :, 2] -= 123.68
         if norm_flag:
-            img_array = img_array / 255
+            img_array = img_array / 255.
 
         # <<JC>> debug
         # print("_val_transform_to_matrices:", img_array.shape, self.img_resize)
+
+        if K.image_data_format() == 'channels_first':
+            img_array = np.transpose(img_array, (2, 0, 1))
 
         return img_array, val_labels
 

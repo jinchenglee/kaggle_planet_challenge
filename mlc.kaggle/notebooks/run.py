@@ -26,7 +26,7 @@ from mynet import MyNet
 MYNET = "vgg16"
 
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"]="0"
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 # Let pandas to print full name of data contents, instead of 'blah...'
 pd.set_option('display.max_colwidth', -1)
@@ -72,7 +72,7 @@ for fn,tags in labels_df.values:
     labels_dict[fn] = tags
 
 # Resize input
-img_resize = (256, 256, 3)
+img_resize = (3, 128, 128)
 
 # Split data into train/validation - percentage setting
 validation_split_size = 0.2
@@ -83,7 +83,7 @@ validation_split_size = 0.2
 #----------------------------
 
 preprocessor = Preprocessor(train_jpeg_dir, train_csv_file, test_jpeg_dir, test_csv_file,
-                            img_resize[:2], validation_split_size)
+                            img_resize[1::], validation_split_size)
 preprocessor.init()
 
 print("X_train/y_train length: {}/{}".format(len(preprocessor.X_train), len(preprocessor.y_train)))
@@ -106,7 +106,7 @@ mynet.model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics
 X_train, y_train = preprocessor.X_train, preprocessor.y_train
 X_val, y_val = preprocessor.X_val, preprocessor.y_val
 
-batch_size = 16
+batch_size = 32
 train_steps = len(X_train) / batch_size
 val_steps = len(X_val) / batch_size
 
@@ -146,6 +146,7 @@ plt.savefig(MYNET+".losses.png")
 # Loading trained weights
 mynet.model.load_weights("weights/weights.best.hdf5")
 print("Weights loaded")
+mynet.model.save("models/vgg16.best.hdf5")
 
 
 # Make predictions to get raw prediction values of each class/sample
@@ -244,7 +245,7 @@ for i in range(len(preprocessor.X_test)):
     test_img_y = preprocessor.y_test[i]
     test_img_x, test_img_y = preprocessor._val_transform_to_matrices((test_img_name, test_img_y))
     # Add dimension 'batch'
-    test_img_x = test_img_x.reshape(-1, 256, 256, 3)
+    test_img_x = test_img_x.reshape(-1, 3, 128, 128)
     
     # Make prediction
     test_img_y_prediction[i] = mynet.model.predict(test_img_x)[0]
@@ -260,6 +261,7 @@ print("fbeta_avg_micro=", fbeta_score(np.array(preprocessor.y_test), test_img_y_
 print("fbeta_avg_macro=", fbeta_score(np.array(preprocessor.y_test), test_img_y_prediction > 0.2, beta=1, average='macro'))
 
 
+from keras import backend as K
 # Precision/Recall/Fbeta
 #  - Implemented as "tensor"
 def myfbeta(y_true, y_pred, beta = 2, threshold_shift=0):
@@ -328,6 +330,7 @@ def mlc_confusion_matrix(yt, yp, classes):
 y_target = np.array(preprocessor.y_test)
 y_pred = (test_img_y_prediction > 0.2).astype(float)
 mlc_confusion_matrix(y_target, y_pred, np.array(list(preprocessor.y_map.values())))
+
 
 
 

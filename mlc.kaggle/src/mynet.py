@@ -3,27 +3,33 @@ from keras.applications.vgg16 import VGG16
 from keras.applications.resnet50 import ResNet50 
 from keras.backend import permute_dimensions
 from keras.models import Model
-from keras.layers import Dense, Input, Flatten, Dropout, Permute
+from keras.layers import Dense, Input, Flatten, Dropout, Permute, Reshape
 from keras.layers.normalization import BatchNormalization
 from sklearn.metrics import fbeta_score
 
 class MyNet:
-    def __init__(self, net_selection="vgg16", img_dim=(128, 128, 3)):
-        input_tensor = Input(shape=img_dim)
+    def __init__(self, net_selection="vgg16", img_dim=(3, 272, 480)):
+
+        # Pretrained model with imagenet weights
         if net_selection=="resnet50":
             base_model = ResNet50(include_top=False,
                                weights='imagenet',
                                input_shape=img_dim)
+            last_layer = 173
         else:
             base_model = VGG16(include_top=False,
                                weights='imagenet',
                                input_shape=img_dim)
-    
-        bn = BatchNormalization()(input_tensor)
-        x = base_model(bn)
-        x = Flatten()(x)
+            last_layer = 18
+
+        # Attaching layers to tail of base_model 
+        x = Flatten()(base_model.layers[last_layer].output)
         output = Dense(17, activation='sigmoid')(x)
-        self.model = Model(input_tensor, output)
+        # Reshape model output if necessary
+        # output = Reshape((17, 1, 1))(output)
+
+        stacked_model = Model(base_model.input, output)
+        self.model = stacked_model
 
     def predict(self, preprocessor, mode=0, batch_size=32):
         """
@@ -95,3 +101,30 @@ class MyNet:
             return
 
         return fbeta_score(np.array(y), pred > 0.2, beta=2, average='samples')
+
+    def _replace_intermediate_layer_in_keras(self, model, layer_id, new_layer):
+    
+        layers = [l for l in model.layers]
+    
+        x = layers[0].output
+        for i in range(1, len(layers)):
+            if i == layer_id:
+                x = new_layer(x)
+            else:
+                x = layers[i](x)
+    
+        new_model = Model(inputs=layers[0].input, outputs=x)
+        return new_model
+    
+    def _insert_intermediate_layer_in_keras(self, model, layer_id, new_layer):
+    
+        layers = [l for l in model.layers]
+    
+        x = layers[0].output
+        for i in range(1, len(layers)):
+            if i == layer_id:
+                x = new_layer(x)
+            x = layers[i](x)
+    
+        new_model = Model(inputs=layers[0].input, outputs=x)
+        return new_model

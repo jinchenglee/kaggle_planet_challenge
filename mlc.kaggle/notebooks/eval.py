@@ -26,7 +26,7 @@ from mynet import MyNet
 MYNET = "vgg16"
 
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"]="0"
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 # Let pandas to print full name of data contents, instead of 'blah...'
 pd.set_option('display.max_colwidth', -1)
@@ -72,7 +72,7 @@ for fn,tags in labels_df.values:
     labels_dict[fn] = tags
 
 # Resize input
-img_resize = (256, 256, 3)
+img_resize = (3, 128, 128)
 
 # Split data into train/validation - percentage setting
 validation_split_size = 0.2
@@ -83,7 +83,7 @@ validation_split_size = 0.2
 #----------------------------
 
 preprocessor = Preprocessor(train_jpeg_dir, train_csv_file, test_jpeg_dir, test_csv_file,
-                            img_resize[:2], validation_split_size)
+                            img_resize[1::], validation_split_size)
 preprocessor.init()
 
 print("X_train/y_train length: {}/{}".format(len(preprocessor.X_train), len(preprocessor.y_train)))
@@ -219,7 +219,7 @@ for i in range(len(preprocessor.X_test)):
     test_img_y = preprocessor.y_test[i]
     test_img_x, test_img_y = preprocessor._val_transform_to_matrices((test_img_name, test_img_y))
     # Add dimension 'batch'
-    test_img_x = test_img_x.reshape(-1, 256, 256, 3)
+    test_img_x = test_img_x.reshape(-1, 3, 128, 128)
     
     # Make prediction
     test_img_y_prediction[i] = mynet.model.predict(test_img_x)[0]
@@ -233,4 +233,78 @@ for i in range(len(preprocessor.X_test)):
 print("fbeta_avg_samples=", fbeta_score(np.array(preprocessor.y_test), test_img_y_prediction > 0.2, beta=1, average='samples'))
 print("fbeta_avg_micro=", fbeta_score(np.array(preprocessor.y_test), test_img_y_prediction > 0.2, beta=1, average='micro'))
 print("fbeta_avg_macro=", fbeta_score(np.array(preprocessor.y_test), test_img_y_prediction > 0.2, beta=1, average='macro'))
+
+
+from keras import backend as K
+# Precision/Recall/Fbeta
+#  - Implemented as "tensor"
+def myfbeta(y_true, y_pred, beta = 2, threshold_shift=0):
+        # just in case of hipster activation at the final layer
+    y_pred = K.clip(y_pred, 0, 1)
+
+    # shifting the prediction threshold from .5 if needed
+    y_pred_bin = K.round(y_pred + threshold_shift)
+
+    tp = K.sum(K.round(y_true * y_pred_bin)) + K.epsilon()
+    fp = K.sum(K.round(K.clip(y_pred_bin - y_true, 0, 1)))
+    fn = K.sum(K.round(K.clip(y_true - y_pred, 0, 1)))
+
+    precision = tp / (tp + fp)
+    recall = tp / (tp + fn)
+
+    beta_squared = beta ** 2
+    fbeta_val = (beta_squared + 1) * (precision * recall) / (beta_squared * precision + recall + K.epsilon())
+    return fbeta_val, precision, recall
+
+f,p,r = myfbeta(K.variable(np.array(preprocessor.y_test)), K.variable(test_img_y_prediction), beta=1, threshold_shift=-0.3)
+print("Fbeta (test data)=", f.eval(session=K.get_session()))
+print("Pecision (test data)=", p.eval(session=K.get_session()))
+print("Recall (test data)=", r.eval(session=K.get_session()))
+
+
+
+
+# Simple confusion matrix for multi-labels classification results
+
+import numpy as np
+import itertools
+import matplotlib.pyplot as plt
+
+def mlc_confusion_matrix(yt, yp, classes):
+    instcount = yt.shape[0]
+    n_classes = classes.shape[0]
+    mtx = np.zeros((n_classes, 4))
+    for i in range(instcount):
+        for c in range(n_classes):
+            mtx[c,0] += 1 if yt[i,c]==1 and yp[i,c]==1 else 0
+            mtx[c,1] += 1 if yt[i,c]==1 and yp[i,c]==0 else 0
+            mtx[c,2] += 1 if yt[i,c]==0 and yp[i,c]==0 else 0
+            mtx[c,3] += 1 if yt[i,c]==0 and yp[i,c]==1 else 0
+    mtx = [[m0/(m0+m1), m1/(m0+m1), m2/(m2+m3), m3/(m2+m3)] for m0,m1,m2,m3 in mtx]
+    mtx_transposed = np.array(mtx).transpose()
+    plt.figure(num=None, figsize=(15, 5), dpi=100, facecolor='w', edgecolor='k')
+    plt.imshow(mtx_transposed, interpolation='nearest',cmap='Wistia')
+    plt.title("Confusion matrix for each class")
+    tick_marks = np.arange(n_classes)
+    plt.yticks(np.arange(4), ['1 - 1 (tp)','1 - 0 (fn)','0 - 0 (tn)','0 - 1 (fp)'])
+    plt.xticks(tick_marks, classes, rotation=35)
+    for i, j in itertools.product(range(n_classes), range(4)):
+        plt.text(i, j, round(mtx[i][j],2), horizontalalignment="center")
+
+    #plt.tight_layout()
+    plt.xlabel('labels')
+    plt.ylabel('Predicted')
+    plt.show()
+
+# y1 = np.genfromtxt('y_true.csv', delimiter=",")
+# y2 = np.genfromtxt('y_pred.csv', delimiter=",")
+# labels = np.genfromtxt('labels.csv', delimiter=",", dtype="|S")
+# confusion_matrix(y1, y2, labels)
+
+y_target = np.array(preprocessor.y_test)
+y_pred = (test_img_y_prediction > 0.2).astype(float)
+mlc_confusion_matrix(y_target, y_pred, np.array(list(preprocessor.y_map.values())))
+
+
+
 
