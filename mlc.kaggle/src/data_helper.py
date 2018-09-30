@@ -217,7 +217,9 @@ class Preprocessor:
         targets = np.zeros(len(labels_map))
 
         for t in tags_str.split(' '):
-            targets[labels_map[t]] = 1
+            # Ignore 'none' tags
+            if t != 'none':
+                targets[labels_map[t]] = 1
         return file_path, targets
 
     def _get_validation_split(self):
@@ -287,6 +289,8 @@ class Preprocessor:
 
 
         labels = sorted(set(chain.from_iterable([tags.split(" ") for tags in labels_df['tags'].values])))
+        # Remove 'none' from labels
+        #labels.remove('none')
         y_map = {l: i for i, l in enumerate(labels)}
 
         with ThreadPoolExecutor(self.process_count) as pool:
@@ -326,6 +330,8 @@ class Preprocessor:
 
 
         labels = sorted(set(chain.from_iterable([tags.split(" ") for tags in labels_test_df['tags'].values])))
+        # Remove 'none' from labels
+        #labels.remove('none')
         y_map = {l: i for i, l in enumerate(labels)}
 
         with ThreadPoolExecutor(self.process_count) as pool:
@@ -416,7 +422,7 @@ class Preprocessor:
 
 
 
-def get_jpeg_data_files_paths():
+def get_jpeg_data_files_paths(overfit=False):
     """
     Returns the input file folders path
 
@@ -427,6 +433,13 @@ def get_jpeg_data_files_paths():
     data_root_folder = os.path.abspath("../input/")
     train_jpeg_dir = os.path.join(data_root_folder, 'train-jpg')
     test_jpeg_dir = os.path.join(data_root_folder, 'test-jpg')
-    train_csv_file = os.path.join(data_root_folder, 'train_v2.csv')
-    test_csv_file = os.path.join(data_root_folder, 'test_v2.csv')
+    if overfit:
+        train_csv_file = os.path.join(data_root_folder, 'train_v3_overfit.csv')
+        test_csv_file = os.path.join(data_root_folder, 'test_v3_overfit.csv')
+    else:
+        train_csv_file = os.path.join(data_root_folder, 'train_v3_resample.csv')
+        #train_csv_file = os.path.join(data_root_folder, 'train_v3.csv')
+        test_csv_file = os.path.join(data_root_folder, 'test_v3.csv')
+    print("train_jpeg_dir, test_jpeg_dir, train_csv_file, test_csv_file=", \
+         "\n", train_jpeg_dir, "\n", test_jpeg_dir, "\n", train_csv_file, "\n", test_csv_file)
     return [train_jpeg_dir, test_jpeg_dir, train_csv_file, test_csv_file]

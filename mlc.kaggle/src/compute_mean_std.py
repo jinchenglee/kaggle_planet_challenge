@@ -5,11 +5,16 @@ from tqdm import tqdm
 
 if __name__ == "__main__":
     data = []
-    df_train = pd.read_csv('../input/train_v2.csv')
+    df_train = pd.read_csv('../input/test_v3.csv') # Memory hungry, use test data instead
 
-    for file in tqdm(df_train['image_name'], miniters=256):
-        img = cv2.imread('../input/train-jpg/{}.jpg'.format(file))
+    count = 0
+    # for file in tqdm(df_train['image_name'], miniters=256):
+    for file in df_train['image_name']:
+        img = cv2.imread('../input/test-jpg/{}.jpg'.format(file))
         data.append(img)
+        count += 1
+        if count > 10000: # Memory hungry, pick some images
+            break
 
     data = np.array(data, np.float32) / 255. # Must use float32 at least otherwise we get over float16 limits
     print("Shape: ", data.shape)

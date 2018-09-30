@@ -3,12 +3,12 @@ from keras.applications.vgg16 import VGG16
 from keras.applications.resnet50 import ResNet50 
 from keras.backend import permute_dimensions
 from keras.models import Model
-from keras.layers import Dense, Input, Flatten, Dropout, Permute, Reshape
+from keras.layers import Dense, Input, Flatten, Dropout, Permute
 from keras.layers.normalization import BatchNormalization
 from sklearn.metrics import fbeta_score
 
 class MyNet:
-    def __init__(self, net_selection="vgg16", img_dim=(3, 272, 480)):
+    def __init__(self, net_selection="vgg16", img_dim=(3, 272, 480), num_classes=17):
 
         # Pretrained model with imagenet weights
         if net_selection=="resnet50":
@@ -24,7 +24,7 @@ class MyNet:
 
         # Attaching layers to tail of base_model 
         x = Flatten()(base_model.layers[last_layer].output)
-        output = Dense(17, activation='sigmoid')(x)
+        output = Dense(num_classes, activation='sigmoid')(x)
         # Reshape model output if necessary
         # output = Reshape((17, 1, 1))(output)
 
@@ -40,7 +40,7 @@ class MyNet:
             2 - validation
         :return:
             predictions: list
-                An array containing 17 length long arrays of raw prediction value.
+                An array containing num_classes length long arrays of raw prediction value.
             filenames: list
                 File names associated to each prediction
         """
@@ -81,7 +81,7 @@ class MyNet:
 
             return predictions_labels
 
-    def fbeta(self, preprocessor, mode=0):
+    def fbeta(self, preprocessor, mode=0, THRESHOLD=0.2):
         """
         mode: 
             0 - test(default)
@@ -100,7 +100,7 @@ class MyNet:
             AssertionError ("Prediction mode not supported!")
             return
 
-        return fbeta_score(np.array(y), pred > 0.2, beta=2, average='samples')
+        return fbeta_score(np.array(y), pred > THRESHOLD, beta=2, average='samples')
 
     def _replace_intermediate_layer_in_keras(self, model, layer_id, new_layer):
     
